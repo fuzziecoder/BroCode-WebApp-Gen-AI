@@ -302,12 +302,17 @@ const ChatPage: React.FC = () => {
                                             
                                             {msg.reactions && Object.keys(msg.reactions).length > 0 && (
                                                 <div className="flex items-center gap-1 mt-1.5 px-1">
-                                                    {Object.entries(msg.reactions).map(([emoji, userIds]) => userIds.length > 0 && (
-                                                        <button key={emoji} onClick={() => handleReaction(msg.id, emoji)} className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-colors ${userIds.includes(user?.id || '') ? 'bg-blue-500/20 border-blue-500/50 text-white' : 'bg-zinc-700/50 border-zinc-700/80 text-zinc-300'}`}>
-                                                            <span>{emoji}</span>
-                                                            <span className="font-semibold">{userIds.length}</span>
-                                                        </button>
-                                                    ))}
+                                                    {Object.entries(msg.reactions).map(([emoji, userIds]) => {
+                                                        // FIX: Add type assertion for userIds, as it may be inferred as 'unknown'
+                                                        // due to a strict TypeScript configuration. This ensures type safety for array operations.
+                                                        const users = userIds as string[];
+                                                        return users.length > 0 && (
+                                                            <button key={emoji} onClick={() => handleReaction(msg.id, emoji)} className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-colors ${users.includes(user?.id || '') ? 'bg-blue-500/20 border-blue-500/50 text-white' : 'bg-zinc-700/50 border-zinc-700/80 text-zinc-300'}`}>
+                                                                <span>{emoji}</span>
+                                                                <span className="font-semibold">{users.length}</span>
+                                                            </button>
+                                                        )
+                                                    })}
                                                 </div>
                                             )}
 

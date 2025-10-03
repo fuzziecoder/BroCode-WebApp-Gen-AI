@@ -25,7 +25,7 @@ export const getPlaceholderImage = (seed: string) => {
 };
 
 // --- AVATAR GENERATION ---
-const generateAvatar = async (userName: string): Promise<string> => {
+const generateAvatar = (userName: string): string => {
     // AI avatar generation is now disabled. Always use a placeholder.
     console.log(`Using placeholder avatar for ${userName}.`);
     return getPlaceholderImage(userName);
@@ -78,10 +78,10 @@ let MOMENTS: Moment[] = [
 ];
 
 // --- HELPER to ensure profile has a generated avatar ---
-const ensureProfileAvatar = async (profile: UserProfile): Promise<UserProfile> => {
+const ensureProfileAvatar = (profile: UserProfile): UserProfile => {
     // Check if the profile pic is missing or is the old SVG placeholder
     if (profile && (!profile.profile_pic_url || profile.profile_pic_url.startsWith('data:image/svg+xml'))) {
-        const newAvatarUrl = await generateAvatar(profile.name);
+        const newAvatarUrl = generateAvatar(profile.name);
         // Update in-memory user object to cache the avatar for the session
         USERS_DB[profile.id] = { ...profile, profile_pic_url: newAvatarUrl };
         return USERS_DB[profile.id];
@@ -100,7 +100,7 @@ export const mockApi = {
         
         // Using a generic password check for any mocked user for demo purposes
         if (foundProfile && password === 'password') {
-             const profile = await ensureProfileAvatar(foundProfile);
+             const profile = ensureProfileAvatar(foundProfile);
              const user: User = { 
                  id: profile.id, 
                  email: profile.email, 
@@ -119,7 +119,7 @@ export const mockApi = {
         const profile = USERS_DB[userId];
         if (!profile) return null;
         
-        return await ensureProfileAvatar(profile);
+        return ensureProfileAvatar(profile);
     },
     
     async updateProfile(userId: string, updates: Partial<UserProfile>): Promise<UserProfile> {
@@ -221,7 +221,7 @@ export const mockApi = {
         for (const msg of MESSAGES) {
             const user = USERS_DB[msg.user_id];
             if (user) {
-                const updatedUser = await ensureProfileAvatar(user);
+                const updatedUser = ensureProfileAvatar(user);
                 msg.profiles.profile_pic_url = updatedUser.profile_pic_url;
             }
         }
