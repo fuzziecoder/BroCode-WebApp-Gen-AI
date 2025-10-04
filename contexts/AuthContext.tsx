@@ -6,7 +6,7 @@ import { mockApi } from '../services/mockApi';
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
   loading: boolean;
@@ -58,8 +58,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     handleAuthStateChange(storedUserId);
   }, [handleAuthStateChange]);
 
-  const login = async (email: string, password: string) => {
-    const { user: loggedInUser, profile: userProfile } = await mockApi.login(email, password);
+  const login = async (identifier: string, password: string) => {
+    const { user: loggedInUser, profile: userProfile } = await mockApi.login(identifier, password);
     localStorage.setItem(AUTH_STORAGE_KEY, loggedInUser.id);
     setUser(loggedInUser);
     setProfile(userProfile);

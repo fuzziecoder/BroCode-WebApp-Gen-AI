@@ -1,4 +1,5 @@
 
+
 export enum UserRole {
   ADMIN = 'admin',
   USER = 'user',
@@ -20,12 +21,19 @@ export interface UserProfile {
   id: string; // UUID
   name: string;
   username: string;
-  email: string;
+  email?: string; // Made optional for mobile-only signup
   phone: string;
   role: UserRole;
   profile_pic_url?: string;
   location: string;
   date_of_birth?: string;
+  password?: string;
+  // Fields for mock OTP flow
+  isVerified?: boolean;
+  otp?: string;
+  otpExpiry?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface Spot {
@@ -34,10 +42,12 @@ export interface Spot {
   day: string;
   timing: string;
   budget: number;
-  location: string;
+  location:string;
   created_by: string; // User ID
   feedback?: string;
   description?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface Drink {

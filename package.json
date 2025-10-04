@@ -17,7 +17,8 @@
     "framer-motion": "^12.23.22",
     "qrcode.react": "^4.2.0",
     "@google/genai": "^0.20.0",
-    "date-fns": "^4.1.0"
+    "date-fns": "^4.1.0",
+    "axios": "^1.7.2"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

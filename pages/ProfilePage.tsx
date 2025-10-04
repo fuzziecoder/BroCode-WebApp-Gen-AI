@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import Modal from '../components/common/Modal';
@@ -5,54 +6,114 @@ import Input from '../components/common/Input';
 import Button from '../components/common/Button';
 import { Spot, Moment } from '../types';
 import { ArrowLeft, MoreHorizontal, Gift, Plus, Image as ImageIcon, X, Trash2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+// FIX: Use namespace import for react-router-dom to address potential module resolution issues.
+import * as ReactRouterDOM from 'react-router-dom';
 import { differenceInYears, format } from 'date-fns';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import GlowButton from '../components/common/GlowButton';
 import { mockApi, getPlaceholderImage } from '../services/mockApi';
+import Textarea from '../components/common/Textarea';
+import AvatarPicker from '../components/common/AvatarPicker';
+
+type ProfileFormData = {
+    name: string;
+    phone: string;
+    location: string;
+    profile_pic_url: string;
+};
 
 // --- Re-usable ProfileForm for editing profile ---
 const ProfileForm: React.FC<{ onSave: () => void }> = ({ onSave }) => {
     const { profile, updateProfile } = useAuth();
-    const [name, setName] = useState(profile?.name || '');
-    const [phone, setPhone] = useState(profile?.phone || '');
-    const [location, setLocation] = useState(profile?.location || '');
+    const [formData, setFormData] = useState<ProfileFormData>({
+        name: profile?.name || '',
+        phone: profile?.phone || '',
+        location: profile?.location || '',
+        profile_pic_url: profile?.profile_pic_url || '',
+    });
+    const [errors, setErrors] = useState<Partial<Record<keyof ProfileFormData, string>>>({});
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
+    const [apiError, setApiError] = useState('');
     const [success, setSuccess] = useState('');
 
     useEffect(() => {
         if (profile) {
-            setName(profile.name);
-            setPhone(profile.phone);
-            setLocation(profile.location);
+            setFormData({
+                name: profile.name,
+                phone: profile.phone,
+                location: profile.location,
+                profile_pic_url: profile.profile_pic_url || '',
+            });
         }
     }, [profile]);
     
+    const validateField = (name: keyof Omit<ProfileFormData, 'profile_pic_url'>, value: string): string => {
+        let error = '';
+        if (!value.trim()) {
+            error = `${name.charAt(0).toUpperCase() + name.slice(1)} is required.`;
+        } else if (name === 'phone' && !/^\d{10}$|^\d{3}-?\d{3}-?\d{4}$/.test(value.replace(/[\s-]/g, ''))) {
+            error = 'Invalid phone number format.';
+        }
+        return error;
+    }
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, value } = e.target as { name: keyof ProfileFormData, value: string };
+        setFormData(prev => ({ ...prev, [name]: value }));
+        if (errors[name as keyof Omit<ProfileFormData, 'profile_pic_url'>]) {
+            setErrors(prev => ({ ...prev, [name]: validateField(name as keyof Omit<ProfileFormData, 'profile_pic_url'>, value) }));
+        }
+    };
+    
+    const handleAvatarChange = (url: string) => {
+        setFormData(prev => ({ ...prev, profile_pic_url: url }));
+    };
+
+    const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+        const { name, value } = e.target as { name: keyof Omit<ProfileFormData, 'profile_pic_url'>, value: string };
+        setErrors(prev => ({ ...prev, [name]: validateField(name, value) }));
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
-        setError('');
+        setApiError('');
         setSuccess('');
 
+        const newErrors: Partial<Record<keyof ProfileFormData, string>> = {};
+        let isValid = true;
+        (['name', 'phone', 'location'] as const).forEach(key => {
+            const error = validateField(key, formData[key]);
+            if (error) {
+                newErrors[key] = error;
+                isValid = false;
+            }
+        });
+
+        if (!isValid) {
+            setErrors(newErrors);
+            return;
+        }
+
+        setLoading(true);
         try {
-            await updateProfile({ name, phone, location });
+            await updateProfile(formData);
             setSuccess('Profile updated successfully!');
             setTimeout(() => onSave(), 1000);
         } catch (err: any) {
-             setError(err.message || 'Failed to update profile.');
+             setApiError(err.message || 'Failed to update profile.');
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
-            <Input id="name" label="Full Name" value={name} onChange={e => setName(e.target.value)} required />
-            <Input id="phone" label="Phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} required />
-            <Input id="location" label="Location" value={location} onChange={e => setLocation(e.target.value)} required />
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            <AvatarPicker label="Choose Avatar" initialValue={formData.profile_pic_url} onChange={handleAvatarChange} />
+            <Input id="name" name="name" label="Full Name" value={formData.name} onChange={handleChange} onBlur={handleBlur} error={errors.name} required />
+            <Input id="phone" name="phone" label="Phone" type="tel" value={formData.phone} onChange={handleChange} onBlur={handleBlur} error={errors.phone} required />
+            <Input id="location" name="location" label="Location" value={formData.location} onChange={handleChange} onBlur={handleBlur} error={errors.location} required />
 
-            {error && <p className="text-sm text-red-500">{error}</p>}
+            {apiError && <p className="text-sm text-red-500">{apiError}</p>}
             {success && <p className="text-sm text-green-500">{success}</p>}
             
             <div className="flex justify-end pt-2">
@@ -70,7 +131,22 @@ const MomentForm: React.FC<{ onSave: () => void }> = ({ onSave }) => {
     const [caption, setCaption] = useState('');
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
+    const [errors, setErrors] = useState({ image: '', caption: '' });
+
+    const validate = (): boolean => {
+        const newErrors = { image: '', caption: '' };
+        let isValid = true;
+        if (!imagePreview) {
+            newErrors.image = 'An image is required.';
+            isValid = false;
+        }
+        if (caption.length > 280) {
+            newErrors.caption = 'Caption cannot exceed 280 characters.';
+            isValid = false;
+        }
+        setErrors(newErrors);
+        return isValid;
+    };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0];
@@ -78,36 +154,44 @@ const MomentForm: React.FC<{ onSave: () => void }> = ({ onSave }) => {
             const reader = new FileReader();
             reader.onloadend = () => {
                 setImagePreview(reader.result as string);
+                 setErrors(prev => ({ ...prev, image: '' }));
             };
             reader.readAsDataURL(selectedFile);
         }
     };
 
+    const handleCaptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        setCaption(e.target.value);
+        if (errors.caption) {
+            setErrors(prev => ({ ...prev, caption: e.target.value.length > 280 ? 'Caption cannot exceed 280 characters.' : '' }));
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!imagePreview || !user) {
-            setError('Please select an image to upload.');
-            return;
-        }
-        setLoading(true);
-        setError('');
+        if (!validate() || !user) return;
 
+        setLoading(true);
         try {
             await mockApi.createMoment({
                 user_id: user.id,
-                image_url: imagePreview,
+                image_url: imagePreview!,
                 caption,
             });
+            // Reset form state before closing
+            setCaption('');
+            setImagePreview(null);
+            setErrors({ image: '', caption: '' });
             onSave();
         } catch (err: any) {
-            setError(err.message || 'Failed to create moment.');
+            setErrors(prev => ({...prev, image: err.message || 'Failed to create moment.'}));
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <div>
                 <label htmlFor="moment-image" className="block text-sm font-medium text-gray-300 mb-2">Image</label>
                 {imagePreview ? (
@@ -124,7 +208,7 @@ const MomentForm: React.FC<{ onSave: () => void }> = ({ onSave }) => {
                     </div>
                 ) : (
                     <div className="flex items-center justify-center w-full">
-                        <label htmlFor="moment-image" className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-600 border-dashed rounded-lg cursor-pointer bg-zinc-800/50 hover:bg-zinc-800">
+                        <label htmlFor="moment-image" className={`flex flex-col items-center justify-center w-full h-32 border-2 ${errors.image ? 'border-red-500/70' : 'border-gray-600'} border-dashed rounded-lg cursor-pointer bg-zinc-800/50 hover:bg-zinc-800 transition-colors`}>
                             <div className="flex flex-col items-center justify-center pt-5 pb-6">
                                 <ImageIcon className="w-8 h-8 mb-2 text-gray-400" />
                                 <p className="mb-2 text-sm text-gray-400"><span className="font-semibold">Click to upload</span></p>
@@ -133,17 +217,29 @@ const MomentForm: React.FC<{ onSave: () => void }> = ({ onSave }) => {
                         </label>
                     </div> 
                 )}
+                 <AnimatePresence>
+                    {errors.image && (
+                        <motion.p
+                            className="mt-1.5 text-xs text-red-400"
+                            initial={{ opacity: 0, y: -5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -5 }}
+                        >
+                            {errors.image}
+                        </motion.p>
+                    )}
+                </AnimatePresence>
             </div>
 
-            <div>
-                <label htmlFor="caption" className="block text-sm font-medium text-gray-300">Caption</label>
-                <textarea id="caption" rows={3} value={caption} onChange={e => setCaption(e.target.value)}
-                    className="mt-1 block w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-zinc-500 sm:text-sm"
-                    placeholder="Add a caption..."
-                />
-            </div>
-
-            {error && <p className="text-sm text-red-500">{error}</p>}
+            <Textarea 
+                id="caption" 
+                label="Caption" 
+                rows={3} 
+                value={caption} 
+                onChange={handleCaptionChange}
+                placeholder="Add a caption..."
+                error={errors.caption}
+            />
 
             <div className="flex justify-end pt-2">
                 <Button type="submit" disabled={loading}>
@@ -156,7 +252,7 @@ const MomentForm: React.FC<{ onSave: () => void }> = ({ onSave }) => {
 
 const ProfilePage: React.FC = () => {
     const { profile, user } = useAuth();
-    const navigate = useNavigate();
+    const navigate = ReactRouterDOM.useNavigate();
     const [activeTab, setActiveTab] = useState<'Details' | 'Moments'>('Details');
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isMomentModalOpen, setIsMomentModalOpen] = useState(false);

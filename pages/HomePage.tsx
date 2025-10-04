@@ -1,13 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, Clock, MapPin, Users, GlassWater, Plus, Ban, ThumbsUp } from 'lucide-react';
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Calendar, Clock, MapPin, Users, GlassWater, Plus, Ban, ThumbsUp, RadioTower } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
-import { Spot, Drink, Invitation, InvitationStatus, UserRole } from '../types';
+import { Spot, Drink, Invitation, InvitationStatus, UserRole, UserProfile } from '../types';
 import Card from '../components/common/Card';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
 import Input from '../components/common/Input';
 import GlowButton from '../components/common/GlowButton';
 import { mockApi } from '../services/mockApi';
+import Textarea from '../components/common/Textarea';
+
+// FIX: Add google maps declaration to fix missing namespace errors.
+declare const google: any;
 
 const locationSuggestions = ['The Downtown Pub', 'Rooftop Bar', 'The Old Cellar', 'Clubhouse', 'The Bar', 'Lounge 3000'];
 
@@ -24,6 +29,23 @@ const StatusBadge: React.FC<{ status: InvitationStatus }> = ({ status }) => {
     );
 }
 
+// Type for New Spot Form Data
+type NewSpotData = {
+    location: string;
+    date: string;
+    timing: string;
+    budget: string;
+    description: string;
+};
+
+const initialSpotData: NewSpotData = {
+    location: 'The Downtown Pub',
+    date: new Date().toISOString().split('T')[0],
+    timing: '21:00',
+    budget: '50',
+    description: '',
+};
+
 const HomePage: React.FC = () => {
     const { profile } = useAuth();
     const [spot, setSpot] = useState<Spot | null>(null);
@@ -31,10 +53,26 @@ const HomePage: React.FC = () => {
     const [invitations, setInvitations] = useState<Invitation[]>([]);
     const [isCreateSpotModalOpen, setCreateSpotModalOpen] = useState(false);
     const [isSuggestDrinkModalOpen, setSuggestDrinkModalOpen] = useState(false);
+    const [isInviteModalOpen, setInviteModalOpen] = useState(false);
+    const [invitableUsers, setInvitableUsers] = useState<UserProfile[]>([]);
+    const [isInviting, setIsInviting] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     
+    // States for modals
     const [newDrinkSuggestion, setNewDrinkSuggestion] = useState('');
+    const [drinkError, setDrinkError] = useState('');
+
+    const [newSpotData, setNewSpotData] = useState<NewSpotData>(initialSpotData);
+    const [spotErrors, setSpotErrors] = useState<Partial<Record<keyof NewSpotData, string>>>({});
+
+    // Map state
+    const mapRef = useRef<HTMLDivElement>(null);
+    const mapInstance = useRef<google.maps.Map | null>(null);
+    const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
+    const [isSharingLocation, setIsSharingLocation] = useState(false);
+    const locationWatchId = useRef<number | null>(null);
+
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -79,23 +117,36 @@ const HomePage: React.FC = () => {
         }
     };
     
+    const validateSpotForm = (): boolean => {
+        const errors: Partial<Record<keyof NewSpotData, string>> = {};
+        if (!newSpotData.location.trim()) errors.location = 'Location is required.';
+        if (!newSpotData.date) errors.date = 'Date is required.';
+        else if (new Date(newSpotData.date) < new Date(new Date().toDateString())) errors.date = "Date cannot be in the past.";
+        if (!newSpotData.timing) errors.timing = 'Timing is required.';
+        if (!newSpotData.budget) errors.budget = 'Budget is required.';
+        else if (isNaN(Number(newSpotData.budget)) || Number(newSpotData.budget) <= 0) errors.budget = 'Budget must be a positive number.';
+
+        setSpotErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
     const handleCreateSpot = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        if (!profile) return;
+        if (!profile || !validateSpotForm()) return;
 
-        const formData = new FormData(e.currentTarget);
-        const newSpotData = {
-            location: formData.get('location') as string,
-            date: new Date(formData.get('date') as string).toISOString(),
-            timing: formData.get('timing') as string,
-            budget: Number(formData.get('budget')),
-            day: new Date(formData.get('date') as string).toLocaleDateString('en-us', { weekday: 'long' }),
+        const spotToCreate = {
+            location: newSpotData.location,
+            date: new Date(newSpotData.date).toISOString(),
+            timing: newSpotData.timing,
+            budget: Number(newSpotData.budget),
+            day: new Date(newSpotData.date).toLocaleDateString('en-us', { weekday: 'long' }),
             created_by: profile.id,
-            description: formData.get('description') as string,
+            description: newSpotData.description,
         };
         
         try {
-            await mockApi.createSpot(newSpotData);
+            await mockApi.createSpot(spotToCreate);
+            setNewSpotData(initialSpotData); // Reset form state
             setCreateSpotModalOpen(false);
             fetchData();
         } catch (error: any) {
@@ -105,8 +156,13 @@ const HomePage: React.FC = () => {
 
     const handleSuggestDrink = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        if (!newDrinkSuggestion.trim() || !profile || !spot) return;
+        if (!newDrinkSuggestion.trim()) {
+            setDrinkError('Drink name is required.');
+            return;
+        }
+        if (!profile || !spot) return;
 
+        setDrinkError('');
         const newDrink = {
             spot_id: spot.id,
             name: newDrinkSuggestion,
@@ -121,7 +177,7 @@ const HomePage: React.FC = () => {
             setNewDrinkSuggestion('');
             setSuggestDrinkModalOpen(false);
             fetchData();
-        } catch (error: any) {
+        } catch (error: any)             {
              alert("Failed to suggest drink: " + error.message);
         }
     };
@@ -137,7 +193,178 @@ const HomePage: React.FC = () => {
             alert("Failed to vote.");
         }
     };
+
+    const handleOpenInviteModal = async () => {
+        if (!spot) return;
+        try {
+            const allUsers = await mockApi.getAllUsers();
+            const invitedUserIds = invitations.map(inv => inv.user_id);
+            const usersToInvite = allUsers.filter(user => !invitedUserIds.includes(user.id));
+            setInvitableUsers(usersToInvite);
+            setInviteModalOpen(true);
+        } catch (error) {
+            console.error("Failed to get users for invitation:", error);
+            alert("Failed to load user list for invitations.");
+        }
+    };
+
+    const handleInviteUser = async (userId: string) => {
+        if (!spot) return;
+        setIsInviting(userId);
+        try {
+            await mockApi.inviteUserToSpot(spot.id, userId);
+            await fetchData();
+            setInvitableUsers(prev => prev.filter(user => user.id !== userId));
+        } catch (error: any) {
+            console.error("Failed to invite user:", error.message);
+            alert("Failed to invite user: " + error.message);
+        } finally {
+            setIsInviting(null);
+        }
+    };
     
+    const toggleLocationSharing = () => {
+        if (isSharingLocation) {
+            if (locationWatchId.current !== null) {
+                navigator.geolocation.clearWatch(locationWatchId.current);
+                locationWatchId.current = null;
+            }
+            setIsSharingLocation(false);
+        } else {
+            if (!navigator.geolocation) {
+                alert("Geolocation is not supported by your browser.");
+                return;
+            }
+
+            const successCallback = (position: GeolocationPosition) => {
+                const { latitude, longitude } = position.coords;
+                if (profile) {
+                    mockApi.updateUserLocation(profile.id, { lat: latitude, lng: longitude });
+                }
+            };
+
+            const errorCallback = (error: GeolocationPositionError) => {
+                alert(`ERROR(${error.code}): ${error.message}`);
+                setIsSharingLocation(false);
+                if (locationWatchId.current !== null) {
+                    navigator.geolocation.clearWatch(locationWatchId.current);
+                }
+            };
+            
+            locationWatchId.current = navigator.geolocation.watchPosition(successCallback, errorCallback, {
+                enableHighAccuracy: true,
+                timeout: 5000,
+                maximumAge: 0,
+            });
+            setIsSharingLocation(true);
+        }
+    };
+
+    useEffect(() => {
+        // FIX: Add runtime check for google maps API to prevent crashes.
+        if (!spot || !mapRef.current || typeof google === 'undefined' || !google.maps) return;
+        if (mapInstance.current) return; // Initialize map only once
+        
+        const mapStyles = [
+            { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+            { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+            { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+            { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+            { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+            { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#263c3f" }] },
+            { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#6b9a76" }] },
+            { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
+            { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
+            { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
+            { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#746855" }] },
+            { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1f2835" }] },
+            { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#f3d19c" }] },
+            { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2f3948" }] },
+            { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+            { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
+            { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#515c6d" }] },
+            { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#17263c" }] },
+        ];
+        
+        // FIX: Use global google object instead of window.google.
+        mapInstance.current = new google.maps.Map(mapRef.current, {
+            center: { lat: spot.latitude || 0, lng: spot.longitude || 0 },
+            zoom: 14,
+            disableDefaultUI: true,
+            styles: mapStyles
+        });
+    }, [spot]);
+
+    useEffect(() => {
+        const updateMarkers = () => {
+            if (!spot || !mapInstance.current) return;
+            const confirmedAttendees = invitations.filter(inv => inv.status === InvitationStatus.CONFIRMED && inv.profiles.latitude && inv.profiles.longitude);
+
+            // Clear old markers
+            markersRef.current.forEach(marker => marker.map = null);
+            markersRef.current = [];
+
+            const bounds = new google.maps.LatLngBounds();
+
+            // Spot Marker
+            if (spot.latitude && spot.longitude) {
+                const spotPosition = { lat: spot.latitude, lng: spot.longitude };
+                const spotIcon = document.createElement('div');
+                spotIcon.innerHTML = '🍻';
+                spotIcon.className = 'text-3xl';
+                
+                const spotMarker = new google.maps.marker.AdvancedMarkerElement({
+                    position: spotPosition,
+                    map: mapInstance.current,
+                    title: spot.location,
+                    content: spotIcon
+                });
+                markersRef.current.push(spotMarker);
+                bounds.extend(spotPosition);
+            }
+            
+            // Attendee Markers
+            confirmedAttendees.forEach(inv => {
+                const user = inv.profiles;
+                const position = { lat: user.latitude!, lng: user.longitude! };
+
+                const profilePic = document.createElement('img');
+                profilePic.src = user.profile_pic_url || '';
+                profilePic.className = "w-10 h-10 rounded-full border-2 border-white shadow-lg";
+                
+                const userMarker = new google.maps.marker.AdvancedMarkerElement({
+                    position,
+                    map: mapInstance.current,
+                    title: user.name,
+                    content: profilePic
+                });
+                markersRef.current.push(userMarker);
+                bounds.extend(position);
+            });
+            
+            if (!bounds.isEmpty()) {
+                mapInstance.current.fitBounds(bounds, 100);
+            }
+        }
+        
+        updateMarkers();
+
+        const intervalId = setInterval(async () => {
+            if (spot) {
+                const updatedInvitations = await mockApi.getInvitations(spot.id);
+                setInvitations(updatedInvitations);
+                updateMarkers();
+            }
+        }, 5000);
+
+        return () => {
+            clearInterval(intervalId);
+            if (locationWatchId.current !== null) {
+                navigator.geolocation.clearWatch(locationWatchId.current);
+            }
+        };
+    }, [spot, invitations]);
+
     const sortedDrinks = [...drinks].sort((a, b) => b.votes - a.votes);
 
     if (loading) return <div className="text-center p-8">Loading spot details...</div>;
@@ -206,6 +433,17 @@ const HomePage: React.FC = () => {
                 )}
             </Card>
 
+            <Card className="!p-0 overflow-hidden relative">
+                <div ref={mapRef} className="w-full h-96 bg-zinc-800" />
+                <div className="absolute bottom-4 right-4">
+                    <Button onClick={toggleLocationSharing} variant={isSharingLocation ? "danger" : "primary"}>
+                        <RadioTower className="w-4 h-4 mr-2"/>
+                        {isSharingLocation ? "Stop Sharing" : "Share My Location"}
+                    </Button>
+                </div>
+            </Card>
+
+
             <div className="grid md:grid-cols-2 gap-8">
                 <Card>
                     <div className="flex justify-between items-center mb-4">
@@ -247,7 +485,7 @@ const HomePage: React.FC = () => {
                 <Card>
                     <div className="flex justify-between items-center mb-4">
                         <h2 className="text-xl font-semibold flex items-center"><Users className="w-5 h-5 mr-2"/>Invitation List</h2>
-                        {isAdmin && <Button size="sm" variant="secondary" disabled><Plus className="w-4 h-4 mr-1"/>Invite</Button>}
+                        {isAdmin && <Button size="sm" variant="secondary" onClick={handleOpenInviteModal}><Plus className="w-4 h-4 mr-1"/>Invite</Button>}
                     </div>
                      <div className="space-y-3">
                         {invitations.map(invitation => (
@@ -270,30 +508,28 @@ const HomePage: React.FC = () => {
 
             {/* Modals */}
             <Modal isOpen={isCreateSpotModalOpen} onClose={() => setCreateSpotModalOpen(false)} title="Create New Spot">
-                <form onSubmit={handleCreateSpot} className="space-y-4">
-                    <Input id="location" name="location" label="Location" type="text" required defaultValue="New Hotspot" list="location-suggestions" />
+                <form onSubmit={handleCreateSpot} className="space-y-4" noValidate>
+                    <Input id="location" name="location" label="Location" type="text" required list="location-suggestions" value={newSpotData.location} onChange={e => setNewSpotData({...newSpotData, location: e.target.value})} error={spotErrors.location} />
                     <datalist id="location-suggestions">
                         {locationSuggestions.map(loc => <option key={loc} value={loc} />)}
                     </datalist>
 
                     <div className="grid grid-cols-2 gap-4">
-                        <Input id="date" name="date" label="Date" type="date" required defaultValue={new Date().toISOString().split('T')[0]}/>
-                        <Input id="timing" name="timing" label="Timing" type="time" required defaultValue="21:00"/>
+                        <Input id="date" name="date" label="Date" type="date" required value={newSpotData.date} onChange={e => setNewSpotData({...newSpotData, date: e.target.value})} error={spotErrors.date} />
+                        <Input id="timing" name="timing" label="Timing" type="time" required value={newSpotData.timing} onChange={e => setNewSpotData({...newSpotData, timing: e.target.value})} error={spotErrors.timing} />
                     </div>
-                    <Input id="budget" name="budget" label="Budget per person" type="number" required defaultValue="50"/>
-
-                    <div>
-                        <label htmlFor="description" className="block text-sm font-medium text-gray-300 mb-1">
-                            Description / Notes
-                        </label>
-                        <textarea
-                            id="description"
-                            name="description"
-                            rows={3}
-                            className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500 transition"
-                            placeholder="e.g., Special occasion, dress code, etc."
-                        />
-                    </div>
+                    <Input id="budget" name="budget" label="Budget per person" type="number" required value={newSpotData.budget} onChange={e => setNewSpotData({...newSpotData, budget: e.target.value})} error={spotErrors.budget} />
+                    
+                    <Textarea 
+                        id="description" 
+                        name="description" 
+                        label="Description / Notes" 
+                        rows={3} 
+                        value={newSpotData.description}
+                        onChange={e => setNewSpotData({...newSpotData, description: e.target.value})}
+                        placeholder="e.g., Special occasion, dress code, etc."
+                        error={spotErrors.description}
+                    />
                     
                     <div className="flex justify-end space-x-4 pt-2">
                         <Button type="button" variant="secondary" onClick={() => setCreateSpotModalOpen(false)}>Cancel</Button>
@@ -303,7 +539,7 @@ const HomePage: React.FC = () => {
             </Modal>
 
             <Modal isOpen={isSuggestDrinkModalOpen} onClose={() => setSuggestDrinkModalOpen(false)} title="Suggest a Drink">
-                <form onSubmit={handleSuggestDrink} className="space-y-4">
+                <form onSubmit={handleSuggestDrink} className="space-y-4" noValidate>
                     <Input 
                         id="drinkName" 
                         name="drinkName" 
@@ -311,14 +547,39 @@ const HomePage: React.FC = () => {
                         type="text" 
                         required 
                         value={newDrinkSuggestion}
-                        onChange={(e) => setNewDrinkSuggestion(e.target.value)}
+                        onChange={(e) => { setNewDrinkSuggestion(e.target.value); setDrinkError(''); }}
                         placeholder="e.g., Tequila Sunrise"
+                        error={drinkError}
                     />
                     <div className="flex justify-end space-x-4 pt-2">
                         <Button type="button" variant="secondary" onClick={() => setSuggestDrinkModalOpen(false)}>Cancel</Button>
                         <Button type="submit">Suggest</Button>
                     </div>
                 </form>
+            </Modal>
+
+            <Modal isOpen={isInviteModalOpen} onClose={() => setInviteModalOpen(false)} title="Invite Users to Spot">
+                <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                    {invitableUsers.length > 0 ? (
+                        invitableUsers.map(user => (
+                            <div key={user.id} className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+                                <div className="flex items-center space-x-4">
+                                    <img src={user.profile_pic_url} alt={user.name} className="w-10 h-10 rounded-full"/>
+                                    <p className="font-medium">{user.name}</p>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    onClick={() => handleInviteUser(user.id)}
+                                    disabled={isInviting === user.id}
+                                >
+                                    {isInviting === user.id ? 'Inviting...' : 'Invite'}
+                                </Button>
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-center text-gray-400 py-4">All users have been invited.</p>
+                    )}
+                </div>
             </Modal>
         </div>
     );

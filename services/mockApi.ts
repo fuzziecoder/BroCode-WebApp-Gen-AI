@@ -1,4 +1,5 @@
 import { UserProfile, UserRole, Spot, Drink, Invitation, InvitationStatus, Payment, PaymentStatus, ChatMessage, Moment, User } from '../types';
+import axios from 'axios';
 
 // --- MOCK HELPER ---
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
@@ -24,26 +25,32 @@ export const getPlaceholderImage = (seed: string) => {
     return placeholderImages[index];
 };
 
-// --- AVATAR GENERATION ---
-const generateAvatar = (userName: string): string => {
-    // AI avatar generation is now disabled. Always use a placeholder.
-    console.log(`Using placeholder avatar for ${userName}.`);
-    return getPlaceholderImage(userName);
-};
+// --- DEFAULT AVATARS ---
+export const DEFAULT_AVATARS = [
+    "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDEyMCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiByeD0iNjAiIGZpbGw9InVybCgjcGFpbnQwX2xpbmVhcl8xXzgpIi8+CjxkZWZzPgo8bGluZWFyR3JhZGllbnQgaWQ9InBhaW50MF9saW5lYXJfMV84IiB4MT0iMCIgeTE9IjAiIHgyPSIxMjAiIHkyPSIxMjAiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KPHN0b3Agc3RvcC1jb2xvcj0iIzI5OERCRiIvPgo8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxQTQyNzUiLz4KPC9saW5lYXJHcmFkaWVudD4KPC9kZWZzPgo8L3N2Zz4K",
+    "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDEyMCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiByeD0iNjAiIGZpbGw9InVybCgjcGFpbnQwX2xpbmVhcl8xXzEwKSIvPgo8ZGVmcz4KPGxpbmVhckdyYWRpZW50IGlkPSJwYWludDBfbGluZWFyXzFfMTAiIHgxPSIwIiB5MT0iMCIgeDI9IjEyMCIgeTI9IjEyMCIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgo8c3RvcCBzdG9wLWNvbG9yPSIjRjBDOEFFIi8+CjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0E1M0Q4NyIvPgo8L2xpbmVhckdyYWRpZW50Pgo8L2RlZnM+Cjwvc3ZnPgo=",
+    "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDEyMCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiByeD0iNjAiIGZpbGw9InVybCgjcGFpbnQwX2xpbmVhcl8xXzEyKSIvPgo8ZGVmcz4KPGxpbmVhckdyYWRpZW50IGlkPSJwYWludDBfbGluZWFyXzFfMTIiIHgxPSIwIiB5MT0iMCIgeDI9IjEyMCIgeTI9IjEyMCIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgo8c3RvcCBzdG9wLWNvbG9yPSIjRkZBMjZCIi8+CjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0Y0NTY0OSIvPgo8L2xpbmVhckdyYWRpZW50Pgo8L2RlZnM+Cjwvc3ZnPgo=",
+    "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDEyMCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiByeD0iNjAiIGZpbGw9InVybCgjcGFpbnQwX2xpbmVhcl8xXzE0KSIvPgo8ZGVmcz4KPGxpbmVhckdyYWRpZW50IGlkPSJwYWludDBfbGluZWFyXzFfMTQiIHgxPSIwIiB5MT0iMCIgeDI9IjEyMCIgeTI9IjEyMCIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgo8c3RvcCBzdG9wLWNvbG9yPSIjNTNFNEYyIi8+CjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzE2OEI4MiIvPgo8L2xpbmVhckdyYWRpZW50Pgo8L2RlZnM+Cjwvc3ZnPgo=",
+    "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDEyMCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiByeD0iNjAiIGZpbGw9InVybCgjcGFpbnQwX2xpbmVhcl8xXzE2KSIvPgo8ZGVmcz4KPGxpbmVhckdyYWRpZW50IGlkPSJwYWludDBfbGluZWFyXzFfMTYiIHgxPSIwIiB5MT0iMCIgeDI9IjEyMCIgeTI9IjEyMCIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgo8c3RvcCBzdG9wLWNvbG9yPSIjRjc3OTdGIi8+CjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0RGNEMxRSIvPgo8L2xpbmVhckdyYWRpZW50Pgo8L2RlZnM+Cjwvc3ZnPgo=",
+    "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDEyMCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiByeD0iNjAiIGZpbGw9InVybCgjcGFpbnQwX2xpbmVhcl8xXzE4KSIvPgo8ZGVmcz4KPGxpbmVhckdyYWRpZW50IGlkPSJwYWludDBfbGluZWFyXzFfMTgiIHgxPSIwIiB5MT0iMCIgeDI9IjEyMCIgeTI9IjEyMCIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgo8c3RvcCBzdG9wLWNvbG9yPSIjQzM3M0Y5Ii8+CjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzdBNEFDRiIvPgo8L2xpbmVhckdyYWRpZW50Pgo8L2RlZnM+Cjwvc3ZnPgo=",
+    "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDEyMCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiByeD0iNjAiIGZpbGw9InVybCgjcGFpbnQwX2xpbmVhcl8xXzIwKSIvPgo8ZGVmcz4KPGxpbmVhckdyYWRpZW50IGlkPSJwYWludDBfbGluZWFyXzFfMjAiIHgxPSIwIiB5MT0iMCIgeDI9IjEyMCIgeTI9IjEyMCIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgo8c3RvcCBzdG9wLWNvbG9yPSIjM0FEQjgwIi8+CjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzE2NzY1QiIvPgo8L2xpbmVhckdyYWRpZW50Pgo8L2RlZnM+Cjwvc3ZnPgo=",
+    "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDEyMCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiByeD0iNjAiIGZpbGw9InVybCgjcGFpbnQwX2xpbmVhcl8xXzIyKSIvPgo8ZGVmcz4KPGxpbmVhckdyYWRpZW50IGlkPSJwYWludDBfbGluZWFyXzFfMjIiIHgxPSIwIiB5MT0iMCIgeDI9IjEyMCIgeTI9IjEyMCIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgo8c3RvcCBzdG9wLWNvbG9yPSIjRDU1Q0M4Ii8+CjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0FBM0M5QiIvPgo8L2xpbmVhckdyYWRpZW50Pgo8L2RlZnM+Cjwvc3ZnPgo=",
+];
+
 
 // --- MOCK DATABASE (in-memory) ---
 
 let USERS_DB: Record<string, UserProfile> = {
-  'brocoder1': { id: 'brocoder1', name: 'Admin Bro', username: 'adminbro', email: 'hi@paujie.com', phone: '123-456-7890', role: UserRole.ADMIN, profile_pic_url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgdmlld0JveD0iMCAwIDE1MCAxNTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iNzUiIGN5PSI3NSIgcj0iNzUiIGZpbGw9IiM0RjQ2RTUiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjcwIiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0id2hpdGUiPkE8L3RleHQ+PC9zdmc+', location: 'Broville', date_of_birth: '1990-01-01' },
-  'brocoder2': { id: 'brocoder2', name: 'Chad', username: 'chadwick', email: 'chad@test.com', phone: '111-222-3333', role: UserRole.USER, profile_pic_url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgdmlld0JveD0iMCAwIDE1MCAxNTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iNzUiIGN5PSI3NSIgcj0iNzUiIGZpbGw9IiMxMDlCRDQiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjcwIiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0id2hpdGUiPkM8L3RleHQ+PC9zdmc+', location: 'Broville', date_of_birth: '1992-05-10' },
-  'brocoder3': { id: 'brocoder3', name: 'Brenda', username: 'brenda', email: 'brenda@test.com', phone: '444-555-6666', role: UserRole.USER, profile_pic_url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgdmlld0JveD0iMCAwIDE1MCAxNTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iNzUiIGN5PSI3NSIgcj0iNzUiIGZpbGw9IiNEOTQ2OUMiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjcwIiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0id2hpdGUiPkI8L3RleHQ+PC9zdmc+', location: 'Broville', date_of_birth: '1995-11-20' },
-  'guest1': { id: 'guest1', name: 'Guest User', username: 'guesty', email: 'guest@test.com', phone: '777-888-9999', role: UserRole.GUEST, profile_pic_url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgdmlld0JveD0iMCAwIDE1MCAxNTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iNzUiIGN5PSI3NSIgcj0iNzUiIGZpbGw9IiM2QjczODciLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjcwIiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0id2hpdGUiPkc8L3RleHQ+PC9zdmc+', location: 'Broville', date_of_birth: '2000-03-15' },
+  'brocoder1': { id: 'brocoder1', name: 'Admin Bro', username: 'adminbro', email: 'hi@paujie.com', phone: '123-456-7890', role: UserRole.ADMIN, profile_pic_url: DEFAULT_AVATARS[0], location: 'Broville', date_of_birth: '1990-01-01', password: 'password', isVerified: true, latitude: 37.7853, longitude: -122.4039 },
+  'brocoder2': { id: 'brocoder2', name: 'Chad', username: 'chadwick', email: 'chad@test.com', phone: '111-222-3333', role: UserRole.USER, profile_pic_url: DEFAULT_AVATARS[1], location: 'Broville', date_of_birth: '1992-05-10', password: 'password', isVerified: true, latitude: 37.7880, longitude: -122.4074 },
+  'brocoder3': { id: 'brocoder3', name: 'Brenda', username: 'brenda', email: 'brenda@test.com', phone: '444-555-6666', role: UserRole.USER, profile_pic_url: DEFAULT_AVATARS[2], location: 'Broville', date_of_birth: '1995-11-20', password: 'password', isVerified: true, latitude: 37.7749, longitude: -122.4194 },
+  'guest1': { id: 'guest1', name: 'Guest User', username: 'guesty', email: 'guest@test.com', phone: '777-888-9999', role: UserRole.GUEST, profile_pic_url: DEFAULT_AVATARS[3], location: 'Broville', date_of_birth: '2000-03-15', password: 'password', isVerified: true },
 };
 
 let SPOTS: Spot[] = [
-    { id: 'spot-1', date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(), day: 'Friday', timing: '9:00 PM', budget: 50, location: 'The Downtown Pub', created_by: 'brocoder1', description: 'Let\'s kick off the weekend with some good drinks and company.' },
-    { id: 'spot-2', date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), day: 'Saturday', timing: '10:00 PM', budget: 60, location: 'The Old Cellar', created_by: 'brocoder1', feedback: 'Great vibe, but a bit pricey.' },
-    { id: 'spot-3', date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), day: 'Friday', timing: '8:00 PM', budget: 40, location: 'Rooftop Bar', created_by: 'brocoder1', feedback: 'Amazing views. Recommended.' },
+    { id: 'spot-1', date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(), day: 'Friday', timing: '9:00 PM', budget: 50, location: 'The Downtown Pub', created_by: 'brocoder1', description: 'Let\'s kick off the weekend with some good drinks and company.', latitude: 37.7853, longitude: -122.4039 },
+    { id: 'spot-2', date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), day: 'Saturday', timing: '10:00 PM', budget: 60, location: 'The Old Cellar', created_by: 'brocoder1', feedback: 'Great vibe, but a bit pricey.', latitude: 37.773972, longitude: -122.431297 },
+    { id: 'spot-3', date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), day: 'Friday', timing: '8:00 PM', budget: 40, location: 'Rooftop Bar', created_by: 'brocoder1', feedback: 'Amazing views. Recommended.', latitude: 37.7914, longitude: -122.4228 },
 ];
 
 let DRINKS: Drink[] = [
@@ -77,61 +84,200 @@ let MOMENTS: Moment[] = [
     { id: 'mom-2', user_id: 'brocoder2', image_url: placeholderImages[1], caption: 'Good times.', created_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString() },
 ];
 
-// --- HELPER to ensure profile has a generated avatar ---
-const ensureProfileAvatar = (profile: UserProfile): UserProfile => {
-    // Check if the profile pic is missing or is the old SVG placeholder
-    if (profile && (!profile.profile_pic_url || profile.profile_pic_url.startsWith('data:image/svg+xml'))) {
-        const newAvatarUrl = generateAvatar(profile.name);
-        // Update in-memory user object to cache the avatar for the session
-        USERS_DB[profile.id] = { ...profile, profile_pic_url: newAvatarUrl };
-        return USERS_DB[profile.id];
-    }
-    return profile;
-};
+const MOCK_FAST2SMS_API_KEY = 'your_fast2sms_api_key_here';
+const fast2smsApiKey = (typeof process !== 'undefined' && process.env && process.env.REACT_APP_FAST2SMS_API_KEY) || MOCK_FAST2SMS_API_KEY;
 
 // --- MOCK API FUNCTIONS ---
 
 export const mockApi = {
     USERS: USERS_DB,
     // --- Auth ---
-    async login(email: string, password: string): Promise<{ user: User, profile: UserProfile }> {
+    async login(identifier: string, password: string): Promise<{ user: User, profile: UserProfile }> {
         await delay(500);
-        const foundProfile = Object.values(USERS_DB).find(p => p.email === email);
+        const isEmail = identifier.includes('@');
+        const foundProfile = Object.values(USERS_DB).find(p => 
+            isEmail ? (p.email === identifier) : (p.phone === identifier)
+        );
         
-        // Using a generic password check for any mocked user for demo purposes
-        if (foundProfile && password === 'password') {
-             const profile = ensureProfileAvatar(foundProfile);
+        if (foundProfile && password === foundProfile.password && foundProfile.isVerified) {
              const user: User = { 
-                 id: profile.id, 
-                 email: profile.email, 
+                 id: foundProfile.id, 
+                 email: foundProfile.email, 
                  app_metadata: {}, 
                  user_metadata: {}, 
                  aud: 'authenticated', 
                  created_at: new Date().toISOString() 
             };
-            return { user, profile };
+            return { user, profile: foundProfile };
         }
-        throw new Error('Invalid credentials');
+        throw new Error('Invalid credentials or user not verified.');
+    },
+
+    async sendMobileOtp(mobile: string): Promise<void> {
+        await delay(500);
+
+        /*
+        // --- REAL OTP IMPLEMENTATION (Fast2SMS) ---
+        // NOTE: This is commented out because it requires a backend to securely store the API key.
+        // Exposing API keys on the frontend is a major security risk. A real implementation would
+        // involve a server-side function to handle this call and protect the API key.
+        
+        try {
+            const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString(); // Generate a random 6-digit OTP
+            const response = await axios.post(
+              "https://www.fast2sms.com/dev/bulkV2",
+              {
+                route: "otp",
+                variables_values: generatedOtp,
+                numbers: mobile,
+              },
+              {
+                headers: {
+                  authorization: fast2smsApiKey, // This key should be stored on a server, not here.
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+
+            if (!response.data.return) {
+                // Fast2SMS API returns 'return: false' on failure.
+                throw new Error(response.data.message || 'Failed to send OTP via Fast2SMS.');
+            }
+
+            console.log('Successfully sent OTP via Fast2SMS:', response.data);
+            const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
+            
+            // The rest of the logic to save the `generatedOtp` and `otpExpiry` to the user profile would go here.
+            // For now, we proceed with the mock flow below.
+
+        } catch (error: any) {
+            console.error("Fast2SMS API Error:", error.response ? error.response.data : error.message);
+            // Fallback to mock logic or throw an error to the user.
+            throw new Error('Failed to send verification code. Please try again later.');
+        }
+        */
+
+        let user = Object.values(USERS_DB).find(u => u.phone === mobile);
+        if (user && user.isVerified) {
+            throw new Error('An account with this mobile number already exists.');
+        }
+        
+        const otp = '123456'; // Mock OTP for testing
+        const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
+    
+        if (user) { // User exists but not verified
+            USERS_DB[user.id] = { ...user, otp, otpExpiry: otpExpiry.toISOString() };
+        } else { // New user
+            const newUserId = `brocoder${Object.keys(USERS_DB).length + 1}`;
+            const randomAvatar = DEFAULT_AVATARS[Math.floor(Math.random() * DEFAULT_AVATARS.length)];
+            const newUser: UserProfile = {
+                id: newUserId,
+                name: `New Bro #${newUserId.slice(-1)}`,
+                username: `newbro${newUserId.slice(-1)}`,
+                phone: mobile,
+                role: UserRole.USER,
+                profile_pic_url: randomAvatar,
+                location: 'Broville',
+                isVerified: false,
+                otp,
+                otpExpiry: otpExpiry.toISOString(),
+            };
+            USERS_DB[newUserId] = newUser;
+        }
+        console.log(`MOCK: OTP for ${mobile} is "${otp}". This would be sent via SMS in a real app.`);
+        return;
+    },
+    
+    async verifyOtp(mobile: string, otp: string): Promise<UserProfile> {
+        await delay(500);
+        const userProfile = Object.values(USERS_DB).find(u => u.phone === mobile);
+        
+        if (!userProfile) throw new Error('User not found.');
+        if (userProfile.otp !== otp || (userProfile.otpExpiry && new Date(userProfile.otpExpiry) < new Date())) {
+            throw new Error('Invalid or expired OTP.');
+        }
+    
+        userProfile.isVerified = true;
+        userProfile.otp = undefined;
+        userProfile.otpExpiry = undefined;
+        USERS_DB[userProfile.id] = userProfile;
+    
+        return userProfile;
+    },
+    
+    async completeRegistration(mobile: string, data: { name: string, username: string, password: string, profile_pic_url: string }): Promise<UserProfile> {
+        await delay(500);
+        const userProfile = Object.values(USERS_DB).find(u => u.phone === mobile);
+        if (!userProfile) throw new Error('User not found.');
+
+        userProfile.name = data.name;
+        userProfile.username = data.username;
+        userProfile.password = data.password;
+        userProfile.profile_pic_url = data.profile_pic_url;
+
+        USERS_DB[userProfile.id] = userProfile;
+        return userProfile;
+    },
+
+    async sendPasswordResetOtp(email: string): Promise<void> {
+        await delay(500);
+        const foundProfile = Object.values(USERS_DB).find(p => p.email === email);
+        if (foundProfile) {
+            console.log(`MOCK: OTP for ${email} is "123456". This would be sent via email/SMS in a real app.`);
+            return;
+        }
+        throw new Error('No account found with that email address.');
+    },
+
+    async resetPassword(email: string, newPassword: string): Promise<void> {
+        await delay(500);
+        const userKey = Object.keys(USERS_DB).find(key => USERS_DB[key].email === email);
+        if (userKey) {
+            USERS_DB[userKey].password = newPassword;
+            console.log(`MOCK: Password for ${email} has been updated to "${newPassword}".`);
+            return;
+        }
+        throw new Error('Failed to reset password for the given email.');
     },
 
     async getProfile(userId: string): Promise<UserProfile | null> {
         await delay(100);
         const profile = USERS_DB[userId];
-        if (!profile) return null;
-        
-        return ensureProfileAvatar(profile);
+        return profile || null;
     },
     
+    async getAllUsers(): Promise<UserProfile[]> {
+        await delay(200);
+        return Object.values(USERS_DB);
+    },
+
     async updateProfile(userId: string, updates: Partial<UserProfile>): Promise<UserProfile> {
         await delay(300);
         USERS_DB[userId] = { ...USERS_DB[userId], ...updates };
         return USERS_DB[userId];
     },
+    
+    async updateUserLocation(userId: string, coords: { lat: number, lng: number }): Promise<UserProfile> {
+        await delay(50); // very short delay for location updates
+        const user = USERS_DB[userId];
+        if (user) {
+            user.latitude = coords.lat;
+            user.longitude = coords.lng;
+            return user;
+        }
+        throw new Error("User not found");
+    },
 
     // --- Spots ---
     async getUpcomingSpot(): Promise<Spot | null> {
         await delay(400);
-        const upcoming = SPOTS.filter(s => new Date(s.date) >= new Date()).sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        const upcoming = SPOTS
+            .filter(s => new Date(s.date) >= new Date())
+            .filter(s => {
+                const creator = USERS_DB[s.created_by];
+                return creator?.role === UserRole.ADMIN;
+            })
+            .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         return upcoming[0] || null;
     },
 
@@ -149,11 +295,26 @@ export const mockApi = {
         await delay(500);
         const newSpot: Spot = { ...spotData, id: `spot-${Date.now()}` };
         SPOTS.push(newSpot);
-        // Automatically create invitations and payments for all users for the new spot
-        Object.values(USERS_DB).forEach(user => {
-            INVITATIONS.push({ id: `inv-${Date.now()}-${user.id}`, spot_id: newSpot.id, user_id: user.id, profiles: user, status: user.id === spotData.created_by ? InvitationStatus.CONFIRMED : InvitationStatus.PENDING });
-            PAYMENTS.push({ id: `pay-${Date.now()}-${user.id}`, spot_id: newSpot.id, user_id: user.id, profiles: user, status: PaymentStatus.NOT_PAID });
-        });
+        
+        // Invite only the creator when a new spot is made.
+        const creator = USERS_DB[spotData.created_by];
+        if (creator) {
+             INVITATIONS.push({ 
+                 id: `inv-${Date.now()}-${creator.id}`, 
+                 spot_id: newSpot.id, 
+                 user_id: creator.id, 
+                 profiles: creator, 
+                 status: InvitationStatus.CONFIRMED 
+            });
+            PAYMENTS.push({ 
+                id: `pay-${Date.now()}-${creator.id}`, 
+                spot_id: newSpot.id, 
+                user_id: creator.id, 
+                profiles: creator, 
+                status: PaymentStatus.NOT_PAID 
+            });
+        }
+        
         return newSpot;
     },
 
@@ -192,6 +353,35 @@ export const mockApi = {
         return INVITATIONS.filter(i => i.spot_id === spotId);
     },
     
+    async inviteUserToSpot(spotId: string, userId: string): Promise<Invitation> {
+        await delay(300);
+        const user = USERS_DB[userId];
+        if (!user) throw new Error("User not found");
+        
+        const existingInvitation = INVITATIONS.find(inv => inv.spot_id === spotId && inv.user_id === userId);
+        if (existingInvitation) throw new Error("User is already invited to this spot");
+    
+        const newInvitation: Invitation = {
+            id: `inv-${Date.now()}-${user.id}`,
+            spot_id: spotId,
+            user_id: user.id,
+            profiles: user,
+            status: InvitationStatus.PENDING
+        };
+        INVITATIONS.push(newInvitation);
+    
+        const newPayment: Payment = {
+            id: `pay-${Date.now()}-${user.id}`,
+            spot_id: spotId,
+            user_id: user.id,
+            profiles: user,
+            status: PaymentStatus.NOT_PAID
+        };
+        PAYMENTS.push(newPayment);
+        
+        return newInvitation;
+    },
+
     async updateInvitationStatus(invitationId: string, status: InvitationStatus): Promise<Invitation> {
         await delay(200);
         const invitation = INVITATIONS.find(i => i.id === invitationId);
@@ -217,14 +407,6 @@ export const mockApi = {
     // --- Chat ---
     async getMessages(): Promise<ChatMessage[]> {
         await delay(500);
-        // Ensure all users in messages have up-to-date profile pics
-        for (const msg of MESSAGES) {
-            const user = USERS_DB[msg.user_id];
-            if (user) {
-                const updatedUser = ensureProfileAvatar(user);
-                msg.profiles.profile_pic_url = updatedUser.profile_pic_url;
-            }
-        }
         return MESSAGES;
     },
 

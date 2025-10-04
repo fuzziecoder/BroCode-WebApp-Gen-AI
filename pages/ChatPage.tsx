@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { mockApi } from '../services/mockApi';
 import { ChatMessage, UserRole } from '../types';
-// FIX: Removed non-existent `Surprised` icon and other unused icons.
 import { ArrowLeft, Video, Plus, Send, X, Smile } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+// FIX: Use namespace import for react-router-dom to address potential module resolution issues.
+import * as ReactRouterDOM from 'react-router-dom';
+import { useChat } from '../contexts/ChatContext';
 
 
 const PhotoGallery: React.FC<{ urls: string[] }> = ({ urls }) => {
@@ -64,25 +66,14 @@ const ReactionPicker: React.FC<{ onSelect: (emoji: string) => void }> = ({ onSel
     );
 };
 
-// A list of mock responses for simulation
-const mockResponses = [
-    "lol that's hilarious 😂",
-    "I agree!",
-    "No way, really?",
-    "That's a great idea.",
-    "I'm not so sure about that.",
-    "🔥🔥🔥",
-    "See you there!",
-];
-
 
 const ChatPage: React.FC = () => {
     const { profile, user } = useAuth();
-    const navigate = useNavigate();
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const navigate = ReactRouterDOM.useNavigate();
+    const { messages, loading, sendMessage, addReaction, setChatActive } = useChat();
+    
     const [newMessage, setNewMessage] = useState('');
     const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-    const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
     const [reactingTo, setReactingTo] = useState<string | null>(null);
 
@@ -95,75 +86,20 @@ const ChatPage: React.FC = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
-    const fetchMessages = useCallback(async () => {
-        setLoading(true);
-        try {
-            const data = await mockApi.getMessages();
-            setMessages(data);
-        } catch (error) {
-            console.error('Error fetching messages:', error);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
     useEffect(() => {
-        fetchMessages();
-    }, [fetchMessages]);
+        setChatActive(true);
+        return () => {
+            setChatActive(false);
+        };
+    }, [setChatActive]);
     
     useEffect(scrollToBottom, [messages]);
     
-    // Simulate receiving new messages from other users
-    useEffect(() => {
-        // Don't run simulation if still loading, user can't chat, or user data is not available yet.
-        if (loading || !canChat || !user) {
-            return;
-        }
-
-        // Get a list of users who can send simulated messages (not the current user or guests).
-        const otherUserIds = Object.keys(mockApi.USERS).filter(
-            id => id !== user.id && mockApi.USERS[id].role !== UserRole.GUEST
-        );
-        
-        // If there are no other users to simulate messages from, don't start the interval.
-        if (otherUserIds.length === 0) return;
-
-        const interval = setInterval(() => {
-            // Pick a random user to send a message.
-            const randomUserId = otherUserIds[Math.floor(Math.random() * otherUserIds.length)];
-            const senderProfile = mockApi.USERS[randomUserId];
-
-            // Pick a random message.
-            const randomMessageText = mockResponses[Math.floor(Math.random() * mockResponses.length)];
-
-            // Construct the new message object.
-            const newMockMessage: ChatMessage = {
-                id: `msg-${Date.now()}`,
-                user_id: senderProfile.id,
-                content_text: randomMessageText,
-                created_at: new Date().toISOString(),
-                profiles: {
-                    name: senderProfile.name,
-                    profile_pic_url: senderProfile.profile_pic_url,
-                },
-            };
-            
-            // Update the state to add the new message.
-            setMessages(prevMessages => [...prevMessages, newMockMessage]);
-
-        }, 8000); // Receive a new message every 8 seconds.
-
-        // Cleanup interval on component unmount.
-        return () => clearInterval(interval);
-
-    }, [loading, canChat, user]); // Rerun effect if loading/canChat/user changes.
-
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (files) {
             const newPreviews: string[] = [];
-            // FIX: Add explicit type annotation `(file: File)` to prevent `file` from being inferred as `unknown`.
             Array.from(files).forEach((file: File) => {
                 const reader = new FileReader();
                 reader.onloadend = () => {
@@ -187,13 +123,11 @@ const ChatPage: React.FC = () => {
         setSending(true);
 
         try {
-            const sentMessage = await mockApi.sendMessage({
-                user_id: user.id,
+            await sendMessage({
                 content_text: newMessage.trim() || undefined,
                 content_image_urls: imagePreviews.length > 0 ? imagePreviews : undefined,
             });
 
-            setMessages(prev => [...prev, sentMessage]);
             setNewMessage('');
             setImagePreviews([]);
         } catch (error: any) {
@@ -208,38 +142,10 @@ const ChatPage: React.FC = () => {
         if (!user) return;
         setReactingTo(null);
 
-        // Optimistic update
-        const originalMessages = [...messages];
-        // FIX: Refactored to use immutable updates for reactions to prevent state mutation bugs and fix type errors.
-        const updatedMessages = messages.map(msg => {
-            if (msg.id === messageId) {
-                const reactions = { ...(msg.reactions || {}) };
-                const userList: string[] = reactions[emoji] || [];
-                
-                const userIndex = userList.indexOf(user.id);
-                if (userIndex > -1) {
-                    const newUserList = userList.filter(id => id !== user.id);
-                    if (newUserList.length > 0) {
-                        reactions[emoji] = newUserList;
-                    } else {
-                        delete reactions[emoji];
-                    }
-                } else {
-                    reactions[emoji] = [...userList, user.id];
-                }
-                return { ...msg, reactions };
-            }
-            return msg;
-        });
-        setMessages(updatedMessages);
-
         try {
-            await mockApi.addReaction(messageId, emoji, user.id);
-            // The API call returns the updated message, we could re-fetch or trust optimistic update.
-            // For now, we trust the optimistic update.
+            await addReaction(messageId, emoji);
         } catch (error) {
             console.error("Failed to add reaction:", error);
-            setMessages(originalMessages); // Revert on error
             alert("Failed to add reaction.");
         }
     };
@@ -302,17 +208,12 @@ const ChatPage: React.FC = () => {
                                             
                                             {msg.reactions && Object.keys(msg.reactions).length > 0 && (
                                                 <div className="flex items-center gap-1 mt-1.5 px-1">
-                                                    {Object.entries(msg.reactions).map(([emoji, userIds]) => {
-                                                        // FIX: Add type assertion for userIds, as it may be inferred as 'unknown'
-                                                        // due to a strict TypeScript configuration. This ensures type safety for array operations.
-                                                        const users = userIds as string[];
-                                                        return users.length > 0 && (
-                                                            <button key={emoji} onClick={() => handleReaction(msg.id, emoji)} className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-colors ${users.includes(user?.id || '') ? 'bg-blue-500/20 border-blue-500/50 text-white' : 'bg-zinc-700/50 border-zinc-700/80 text-zinc-300'}`}>
-                                                                <span>{emoji}</span>
-                                                                <span className="font-semibold">{users.length}</span>
-                                                            </button>
-                                                        )
-                                                    })}
+                                                    {Object.entries(msg.reactions).map(([emoji, userIds]: [string, string[]]) => userIds.length > 0 && (
+                                                        <button key={emoji} onClick={() => handleReaction(msg.id, emoji)} className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-colors ${userIds.includes(user?.id || '') ? 'bg-blue-500/20 border-blue-500/50 text-white' : 'bg-zinc-700/50 border-zinc-700/80 text-zinc-300'}`}>
+                                                            <span>{emoji}</span>
+                                                            <span className="font-semibold">{userIds.length}</span>
+                                                        </button>
+                                                    ))}
                                                 </div>
                                             )}
 

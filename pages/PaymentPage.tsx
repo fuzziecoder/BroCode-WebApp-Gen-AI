@@ -4,9 +4,7 @@ import { Payment, PaymentStatus, UserRole, Spot } from '../types';
 import Card from '../components/common/Card';
 import Button from '../components/common/Button';
 import { mockApi } from '../services/mockApi';
-// FIX: Switched from the default `QRCode` component to the named `QRCodeSVG` export from `qrcode.react`.
-// The default export can cause module resolution errors and is deprecated. This change also removes the now-redundant `renderAs` prop.
-import { QRCodeSVG } from 'qrcode.react';
+import { QRCodeCanvas } from 'qrcode.react';
 
 const PaymentStatusBadge: React.FC<{ status: PaymentStatus }> = ({ status }) => {
     const isPaid = status === PaymentStatus.PAID;
@@ -62,6 +60,8 @@ const PaymentPage: React.FC = () => {
     if (loading) return <div className="text-center p-8">Loading payments...</div>;
     if (error) return <div className="text-center p-8 text-red-400">{error}</div>;
 
+    const paymentUri = `upi://pay?pa=adminbro@brocode&pn=Admin%20Bro&am=${spot?.budget}.00&cu=USD&tn=Payment%20for%20${spot?.location ? encodeURIComponent(spot.location) : 'spot'}`;
+
     return (
         <div className="space-y-8 pb-20 md:pb-0">
             <h1 className="text-3xl font-bold">Payment</h1>
@@ -72,17 +72,17 @@ const PaymentPage: React.FC = () => {
                 <div className="grid md:grid-cols-2 gap-8">
                     <Card className="flex flex-col items-center justify-center text-center">
                         <h2 className="text-2xl font-semibold mb-4">Scan to Pay</h2>
-                        <div className="p-2 bg-white rounded-lg mb-4">
-                            <QRCodeSVG
-                                value={`upi://pay?pa=brocode@payment&pn=BroCode&am=${spot.budget}.00&cu=USD&tn=Payment for ${spot.location}`}
-                                size={176}
-                                bgColor="#ffffff"
-                                fgColor="#000000"
-                                level="L"
+                        <div className="bg-white p-3 rounded-lg">
+                            <QRCodeCanvas 
+                                value={paymentUri}
+                                size={180}
+                                bgColor={"#ffffff"}
+                                fgColor={"#000000"}
+                                level={"H"}
                                 includeMargin={false}
                             />
                         </div>
-                        <p className="text-gray-400 text-sm">Amount due: ${spot.budget}.00</p>
+                        <p className="text-gray-400 text-sm mt-4">Amount due: ${spot.budget}.00</p>
                     </Card>
                     <Card>
                         <h2 className="text-xl font-semibold mb-4">Payment Breakdown</h2>

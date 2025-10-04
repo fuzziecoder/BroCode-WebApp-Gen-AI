@@ -1,5 +1,7 @@
+
 import React from 'react';
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+// FIX: Use namespace import for react-router-dom to address potential module resolution issues.
+import * as ReactRouterDOM from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotificationsProvider } from './contexts/NotificationsContext';
 import SplashPage from './pages/SplashPage';
@@ -12,34 +14,37 @@ import NotificationsPage from './pages/NotificationsPage';
 import ProfilePage from './pages/ProfilePage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import ChatPage from './pages/ChatPage';
+import { ChatProvider } from './contexts/ChatContext';
 
 const App: React.FC = () => {
   return (
     <AuthProvider>
       <NotificationsProvider>
-        <HashRouter>
-          <Routes>
-            <Route path="/" element={<SplashPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route 
-              path="/dashboard" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<Navigate to="home" replace />} />
-              <Route path="home" element={<HomePage />} />
-              <Route path="payment" element={<PaymentPage />} />
-              <Route path="history" element={<HistoryPage />} />
-              <Route path="notifications" element={<NotificationsPage />} />
-              <Route path="chat" element={<ChatPage />} />
-              <Route path="profile" element={<ProfilePage />} />
-            </Route>
-            <Route path="*" element={<Navigate to="/" />} />
-          </Routes>
-        </HashRouter>
+        <ChatProvider>
+          <ReactRouterDOM.HashRouter>
+            <ReactRouterDOM.Routes>
+              <ReactRouterDOM.Route path="/" element={<SplashPage />} />
+              <ReactRouterDOM.Route path="/login" element={<LoginPage />} />
+              <ReactRouterDOM.Route 
+                path="/dashboard" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <ReactRouterDOM.Route index element={<ReactRouterDOM.Navigate to="home" replace />} />
+                <ReactRouterDOM.Route path="home" element={<HomePage />} />
+                <ReactRouterDOM.Route path="payment" element={<PaymentPage />} />
+                <ReactRouterDOM.Route path="history" element={<HistoryPage />} />
+                <ReactRouterDOM.Route path="notifications" element={<NotificationsPage />} />
+                <ReactRouterDOM.Route path="chat" element={<ChatPage />} />
+                <ReactRouterDOM.Route path="profile" element={<ProfilePage />} />
+              </ReactRouterDOM.Route>
+              <ReactRouterDOM.Route path="*" element={<ReactRouterDOM.Navigate to="/" />} />
+            </ReactRouterDOM.Routes>
+          </ReactRouterDOM.HashRouter>
+        </ChatProvider>
       </NotificationsProvider>
     </AuthProvider>
   );

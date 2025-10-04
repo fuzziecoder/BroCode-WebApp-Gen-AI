@@ -1,9 +1,12 @@
+
 import React from 'react';
-import { Outlet, NavLink, useLocation } from 'react-router-dom';
+// FIX: Use namespace import for react-router-dom to address potential module resolution issues.
+import * as ReactRouterDOM from 'react-router-dom';
 import { Home, CreditCard, History, Bell, User, Zap, ChevronsUpDown, LogOut, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotifications } from '../../contexts/NotificationsContext';
+import { useChat } from '../../contexts/ChatContext';
 
 const navItems = [
   { path: '/dashboard/home', icon: Home, label: 'Home' },
@@ -18,12 +21,15 @@ const bottomNavItems = [
 ];
 
 const NavItem: React.FC<{ item: typeof navItems[0]; isMobile: boolean }> = ({ item, isMobile }) => {
-  const { unreadCount } = useNotifications();
+  const { unreadCount: unreadNotificationsCount } = useNotifications();
+  const { unreadCount: unreadChatCount } = useChat();
   const isNotificationsLink = item.label === 'Notifications';
+  const isChatLink = item.label === 'Chat';
+  const badgeCount = isNotificationsLink ? unreadNotificationsCount : (isChatLink ? unreadChatCount : 0);
 
   if (isMobile) {
     return (
-        <NavLink
+        <ReactRouterDOM.NavLink
             to={item.path}
             className="flex-1 flex justify-center items-center h-full group"
             aria-label={item.label}
@@ -37,9 +43,9 @@ const NavItem: React.FC<{ item: typeof navItems[0]; isMobile: boolean }> = ({ it
                 >
                     <div className="relative">
                         <item.icon className="h-5 w-5 flex-shrink-0" />
-                        {isNotificationsLink && unreadCount > 0 && (
+                        {badgeCount > 0 && (
                             <span className={`absolute -top-1.5 -right-1.5 bg-pink-500 text-white text-[9px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center border-2 ${isActive ? 'border-white' : 'border-[#1C1C1C]'}`}>
-                                {unreadCount > 9 ? '9+' : unreadCount}
+                                {badgeCount > 9 ? '9+' : badgeCount}
                             </span>
                         )}
                     </div>
@@ -56,13 +62,13 @@ const NavItem: React.FC<{ item: typeof navItems[0]; isMobile: boolean }> = ({ it
                     )}
                 </motion.div>
             )}
-        </NavLink>
+        </ReactRouterDOM.NavLink>
     );
   }
 
   // Desktop styles
   return (
-    <NavLink
+    <ReactRouterDOM.NavLink
       to={item.path}
       className={({ isActive }) => 
         `flex items-center px-3 py-2.5 rounded-md transition-colors duration-200 text-sm font-medium ${
@@ -74,18 +80,18 @@ const NavItem: React.FC<{ item: typeof navItems[0]; isMobile: boolean }> = ({ it
     >
       <item.icon className="h-5 w-5 mr-3" />
       <span className="flex-1">{item.label}</span>
-      {isNotificationsLink && unreadCount > 0 && (
+      {badgeCount > 0 && (
         <span className="ml-2 bg-pink-500 text-white text-[10px] font-bold min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center">
-          {unreadCount > 9 ? '9+' : unreadCount}
+          {badgeCount > 9 ? '9+' : badgeCount}
         </span>
       )}
-    </NavLink>
+    </ReactRouterDOM.NavLink>
   );
 };
 
 
 const DashboardLayout: React.FC = () => {
-    const location = useLocation();
+    const location = ReactRouterDOM.useLocation();
     const { profile, logout } = useAuth();
     const allNavItemsForMobile = [...navItems, ...bottomNavItems];
 
@@ -145,7 +151,7 @@ const DashboardLayout: React.FC = () => {
                             exit={{ opacity: 0, y: -20 }}
                             transition={{ duration: 0.3 }}
                         >
-                            <Outlet />
+                            <ReactRouterDOM.Outlet />
                         </motion.div>
                     </AnimatePresence>
                 </div>

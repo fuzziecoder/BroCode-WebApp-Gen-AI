@@ -1,12 +1,14 @@
 
+
 import React, { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+// FIX: Use namespace import for react-router-dom to address potential module resolution issues.
+import * as ReactRouterDOM from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../hooks/useAuth';
 import Logo from '../components/common/Logo';
 
 const SplashPage: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = ReactRouterDOM.useNavigate();
   const { user } = useAuth();
 
   useEffect(() => {
